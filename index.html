@@ -390,9 +390,8 @@
     .player-overlay video { 
       width: 100vw; 
       height: 100vh;
-      object-fit: contain; 
+      object-fit: contain; /* تأكد من ظهور الفيديو بالكامل */
       outline: none; 
-      /* لجعل المشغل يظهر بشكل أفضل في الوضع الداكن */
       background-color: #000;
     }
 
@@ -1188,6 +1187,8 @@ justify-content: center;
             element.webkitRequestFullscreen();
         } else if (element.msRequestFullscreen) { /* IE11 */
             element.msRequestFullscreen();
+        } else if (element.mozRequestFullScreen) { /* Firefox */
+            element.mozRequestFullScreen();
         }
     }
 
@@ -1198,14 +1199,17 @@ justify-content: center;
             document.webkitExitFullscreen();
         } else if (document.msExitFullscreen) { /* IE11 */
             document.msExitFullscreen();
+        } else if (document.mozCancelFullScreen) { /* Firefox */
+            document.mozCancelFullScreen();
         }
     }
 
-    // --- المشغل المحدث: دعم HLS.js وملء الشاشة ---
+    // --- المشغل المحدث: دعم HLS.js وملء الشاشة (الجزء الأهم في التحديث) ---
     function openPlayer(streamId, extension, forcedMode = null) {
         let streamUrl;
         const mode = forcedMode || currentMode;
         
+        // بناء الرابط
         if (mode === 'live') {
             streamUrl = `${API_URL}/live/${USERNAME}/${PASSWORD}/${streamId}.m3u8`;
         } else if (mode === 'movie') {
@@ -1220,25 +1224,35 @@ justify-content: center;
         playerOverlay.style.display = 'flex';
         enterFullscreen(playerOverlay); // الدخول في وضع ملء الشاشة
 
-        // التحقق من نوع البث (HLS)
+        // 1. تدمير المشغل القديم إذا كان موجوداً
+        if (hls) {
+            hls.destroy();
+            hls = null;
+        }
+        videoPlayer.src = ""; // مسح مصدر الفيديو القديم
+        
+        // 2. التحقق من نوع البث (HLS)
         if (streamUrl.endsWith('.m3u8') && Hls.isSupported()) {
-            if (hls) hls.destroy();
             hls = new Hls();
             hls.loadSource(streamUrl);
             hls.attachMedia(videoPlayer);
+            
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
                 videoPlayer.play().catch(e => console.error("Autoplay prevented:", e));
             });
+            
             hls.on(Hls.Events.ERROR, (event, data) => {
                 console.error("HLS error:", data.type, data.details);
-                // الرجوع إلى مشغل المتصفح العادي في حالة فشل HLS
-                videoPlayer.src = streamUrl;
-                videoPlayer.play().catch(e => console.error("Autoplay prevented (fallback):", e));
+                // الحل البديل: الرجوع إلى مشغل المتصفح العادي (قد يعمل على بعض الأجهزة)
+                if (data.fatal) {
+                   if (hls) hls.destroy();
+                   hls = null;
+                   videoPlayer.src = streamUrl; 
+                   videoPlayer.play().catch(e => console.error("Autoplay prevented (fallback):", e));
+                }
             });
         } else {
-            // للملفات MP4/MOV أو عدم دعم HLS
-            if (hls) hls.destroy();
-            hls = null;
+            // 3. للملفات MP4/MOV أو عدم دعم HLS
             videoPlayer.src = streamUrl;
             videoPlayer.play().catch(e => console.error("Autoplay prevented:", e));
         }
@@ -1267,6 +1281,13 @@ justify-content: center;
                 closePlayer();
             }
         });
+        
+        // محاولة الدخول في ملء الشاشة على أول تفاعل للمستخدم (لتحسين تجربة الجوال)
+        document.body.addEventListener('click', () => {
+            if (playerOverlay.style.display === 'flex' && !document.fullscreenElement) {
+                 enterFullscreen(playerOverlay);
+            }
+        }, { once: true });
     };
 
   </script>
@@ -1303,7 +1324,7 @@ if (navigator.share) {
 } else {
     // إذا لم يكن Web Share API مدعومًا
     shareButton.disabled = true;
-    shareButton.textContent = '';
+    shareButton.textContent = 'مشاركة غير مدعومة';
 }
 
 // تحقق من دعم إشعارات المتصفح
