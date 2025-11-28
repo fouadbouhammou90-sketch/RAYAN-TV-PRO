@@ -381,6 +381,19 @@
       font-size: 14px;
       display: none;
     }
+    .error-msg {
+        display: none;
+        color: #e74c3c;
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #e74c3c;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 400px;
+        text-align: center;
+        margin-left: auto;
+        margin-right: auto;
+    }
 
     /* --- القائمة السفلية (Bottom Navigation) --- */
     .bottom-nav {
@@ -597,7 +610,7 @@
 
   <div class="main">
     <div id="loading" class="loading-msg">جاري التحميل...</div>
-    <div class="categories-container" id="categories"></div>
+    <div id="error-message" class="error-msg"></div> <div class="categories-container" id="categories"></div>
     <div class="content-container" id="content-list"></div>
     <div class="episodes-container" id="episodes-list"></div>
   </div>
@@ -642,7 +655,7 @@
     <li><a href="#"><i style="color:#229ED9" class="fab fa-telegram"></i><h3> Telegram</h3></a></li>
     <li id="shareButton"><a href="#"><i class="fas fa-share-alt"></i><h3> Share Apps</h3></a></li>
     <li><a href="#"><i class="fa-solid fa-envelope"></i><h3> Contact</h3></a></li>
-    </ul>
+</ul>
 <footer>
     <p><span></span>&copy;2025 جميع الحقوق محفوظة</p>
 </footer>
@@ -650,8 +663,9 @@
 
 <div id="myOverlay" class="overlay" onclick="closeNav()"></div>
   <script>
-    // --- إعدادات السيرفر ---
-    const API_URL = 'http://cdnplus-ott.tv';
+    // 🔔 التعديل الرئيسي هنا: تغيير البروتوكول إلى HTTPS 
+    // إذا كان الخادم لا يدعم HTTPS، فلن يعمل، ويجب استخدام خادم وسيط (Proxy)
+    const API_URL = 'https://cdnplus-ott.tv'; 
     const USERNAME = '65787';
     const PASSWORD = '54353';
 
@@ -719,6 +733,7 @@
     const titleDiv = document.getElementById('header-title');
     const backBtn = document.getElementById('back-button');
     const loadingDiv = document.getElementById('loading');
+    const errorDiv = document.getElementById('error-message'); // عنصر رسالة الخطأ
     const playerOverlay = document.getElementById('playerOverlay');
     const videoPlayer = document.getElementById('videoPlayer');
     
@@ -727,6 +742,18 @@
     const searchInput = document.getElementById('searchInput');
     const modeIcon = document.getElementById('mode-icon');
     
+    // وظيفة إظهار الخطأ
+    function showError(message) {
+        loadingDiv.style.display = 'none';
+        categoriesDiv.innerHTML = '';
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+
+    function hideError() {
+        errorDiv.style.display = 'none';
+    }
+
 
     function cleanName(originalName) {
         if (!originalName) return "No Name";
@@ -739,6 +766,7 @@
     // --- وظائف جديدة: إعادة التحميل وتغيير الوضع ---
     function reloadPage() {
         isDataLoaded = { live: false, movie: false, series: false }; 
+        hideError(); // إخفاء أي رسالة خطأ سابقة
         switchMode(currentMode);
     }
 
@@ -777,6 +805,7 @@
             categoriesDiv.style.display = 'none';
             contentDiv.style.display = 'flex';
             episodesDiv.style.display = 'none';
+            hideError(); 
             contentDiv.innerHTML = '<p style="width:100%; margin-top:20px; color:#999;">اكتب للبحث...</p>';
             currentView = 'search';
         } else {
@@ -905,6 +934,7 @@
         contentDiv.style.display = 'flex';
         episodesDiv.style.display = 'none';
         backBtn.style.display = 'none';
+        hideError();
         currentView = 'list';
         titleDiv.textContent = 'FAVORITES';
 
@@ -955,6 +985,7 @@
         contentDiv.style.display = 'none';
         episodesDiv.style.display = 'none';
         backBtn.style.display = 'none';
+        hideError(); 
         currentView = 'categories';
     }
 
@@ -964,6 +995,7 @@
 
         loadingDiv.style.display = 'block';
         categoriesDiv.innerHTML = '';
+        hideError();
         
         let actionCat, actionStream;
         if (currentMode === 'live') { actionCat = 'get_live_categories'; actionStream = 'get_live_streams'; } 
@@ -1017,11 +1049,13 @@
                     btn.onclick = () => fetchContent(cat.category_id, displayName);
                     categoriesDiv.appendChild(btn);
                 });
+            } else {
+                 showError("لم يتم العثور على أقسام. تأكد من صحة بيانات الدخول.");
             }
         } catch (error) {
-            console.error(error);
-            loadingDiv.style.display = 'none';
-            categoriesDiv.innerHTML = '<p>خطأ في الاتصال</p>';
+            console.error("Fetch Error:", error);
+            // 🔔 رسالة خطأ موجهة للمستخدم لحل مشكلة CORS / HTTPS
+            showError(`خطأ في الاتصال: قد يكون السبب هو حظر نطاق GitHub Pages من قبل خادم الـ API أو عدم دعم الخادم للاتصال الآمن (HTTPS). (${error.message || 'Network Error'})`);
         }
     }
 
@@ -1058,6 +1092,7 @@
         episodesDiv.innerHTML = '';
         loadingDiv.style.display = 'block';
         loadingDiv.textContent = "جلب الحلقات...";
+        hideError();
         
         currentView = 'episodes';
         titleDiv.textContent = cleanName(seriesName);
@@ -1103,7 +1138,7 @@
         } catch (error) {
             console.error(error);
             loadingDiv.style.display = 'none';
-            episodesDiv.innerHTML = '<p>خطأ في جلب البيانات</p>';
+            showError("خطأ في جلب بيانات المسلسل.");
         }
     }
 
@@ -1112,6 +1147,7 @@
         let streamUrl;
         const mode = forcedMode || currentMode;
         
+        // 🔔 روابط البث أيضاً تم تحويلها لـ HTTPS
         if (mode === 'live') {
             streamUrl = `${API_URL}/live/${USERNAME}/${PASSWORD}/${streamId}.m3u8`;
         } else if (mode === 'movie') {
@@ -1128,6 +1164,13 @@
             hls.loadSource(streamUrl);
             hls.attachMedia(videoPlayer);
             hls.on(Hls.Events.MANIFEST_PARSED, () => videoPlayer.play());
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    console.error('HLS Fatal Error:', data.details);
+                    alert("فشل في تشغيل البث: قد تكون مشكلة في الخادم أو في دعم البروتوكول (HTTPS).");
+                    closePlayer();
+                }
+            });
         } else {
             videoPlayer.src = streamUrl;
             videoPlayer.play();
